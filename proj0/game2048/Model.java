@@ -1,7 +1,6 @@
 package game2048;
 
-import java.util.Formatter;
-import java.util.Observable;
+import java.util.*;
 
 
 /** The state of a game of 2048.
@@ -94,6 +93,59 @@ public class Model extends Observable {
         setChanged();
     }
 
+    private static class Coordinate {
+        int col;
+        int row;
+        public Coordinate(int c, int r) {
+            col = c;
+            row = r;
+        }
+    }
+
+    /**
+     * A way to memorize the original (col, row) pair
+     */
+    private static class VTile {
+        int col;
+        int row;
+        Tile actualTile;
+        public VTile(int col, int row, Tile t) {
+            this.col = col;
+            this.row = row;
+            actualTile = t;
+        }
+    }
+
+    private VTile findNearestTileAbove(VTile vTile) {
+        for (int row = vTile.row + 1; row < board.size(); row++) {
+            Tile actualTile = board.tile(vTile.col, row);
+            if (actualTile != null) {
+                return new VTile(vTile.col, row, actualTile);
+            }
+        }
+        return null;
+    }
+
+    private boolean moveTileUp(VTile vTile, Set<Tile> changedTiles) {
+        int targetRow;
+        VTile nearest = findNearestTileAbove(vTile);
+        if (nearest == null) {
+            targetRow = board.size() - 1;
+        } else if (vTile.actualTile.value() == nearest.actualTile.value() && !changedTiles.contains(nearest.actualTile)) {
+            targetRow = nearest.row;
+        } else if (nearest.row == vTile.row + 1) {
+            return false;
+        } else {
+            targetRow = nearest.row - 1;
+        }
+        boolean isMerged = board.move(vTile.col, targetRow, vTile.actualTile);
+        if (isMerged) {
+            score += vTile.actualTile.next().value();
+            changedTiles.add(board.tile(vTile.col, targetRow));
+        }
+        return true;
+    }
+
     /** Tilt the board toward SIDE. Return true iff this changes the board.
      *
      * 1. If two Tile objects are adjacent in the direction of motion and have
@@ -110,10 +162,29 @@ public class Model extends Observable {
         boolean changed;
         changed = false;
 
+        // NOTE: consider moving upward only
+
+        this.board.setViewingPerspective(side);
+        Set<Tile> mergedTiles = new HashSet<>();
+
         // TODO: Modify this.board (and perhaps this.score) to account
         // for the tilt to the Side SIDE. If the board changed, set the
         // changed local variable to true.
-        
+        for (int row = board.size() - 2; row >= 0; row--) {
+            for (int col = 0; col < board.size(); col++) {
+                Tile tile = board.tile(col, row);
+                if (tile == null) {
+                    continue;
+                }
+                VTile vTile = new VTile(col, row, tile);
+                boolean isChangedAfterMove = moveTileUp(vTile, mergedTiles);
+                if (isChangedAfterMove) {
+                    changed = true;
+                }
+            }
+        }
+
+        this.board.setViewingPerspective(Side.NORTH);
         checkGameOver();
         if (changed) {
             setChanged();
